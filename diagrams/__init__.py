@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 from graphviz import Digraph
+import networkx as nx
+import matplotlib.pyplot as plt
+from networkx.drawing.nx_agraph import graphviz_layout
+from networkx.classes.graph import Graph
 
 # Global contexts for a diagrams and a cluster.
 #
@@ -553,3 +557,72 @@ class Edge:
 
 
 Group = Cluster
+
+class DiagramV2:
+    def __init__(
+            self,
+            name: str = "",
+            filename: str = "",
+            show: bool = True,
+            graph_attr: dict = None,
+            node_attr: dict = None,
+            edge_attr: dict = None,
+    ):
+        self.name = name
+        if not name and not filename:
+            filename = "diagrams_image"
+        elif not filename:
+            filename = "_".join(self.name.split()).lower()
+        self.filename = filename
+        self.G = nx.DiGraph(name=self.name)
+        self.show = show
+        self.graph_attr = graph_attr if graph_attr else {}
+        self.node_attr = node_attr if node_attr else {}
+        self.edge_attr = edge_attr if edge_attr else {}
+        self.subgraphs = {}
+
+    def __str__(self):
+        return str(self.G)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.render()
+
+    def node(self, nodeid: str, label: str = None, **attrs):
+        attr = self.node_attr.copy()
+        attr.update(attrs)
+        if label is not None:
+            attr['label'] = label
+        self.G.add_node(nodeid, **attr)
+
+    def connect(self, node1: str, node2: str, **attrs):
+        attr = self.edge_attr.copy()
+        attr.update(attrs)
+        self.G.add_edge(node1, node2, **attr)
+
+    def subgraph(self, name, nodes):
+        self.subgraphs[name] = nodes
+
+    def render(self):
+        pos = graphviz_layout(self.G, prog='dot')
+        plt.figure(figsize=(8, 6))
+        labels = nx.get_node_attributes(self.G, 'label')
+
+        # draw nodes, differentiating by subgraph
+        default_color = 'lightblue'
+        for subgraph_name, subgraph_nodes in self.subgraphs.items():
+            nx.draw_networkx_nodes(self.G, pos, nodelist=subgraph_nodes, node_color=subgraph_name)
+        remaining_nodes = set(self.G.nodes) - set(sum(self.subgraphs.values(), []))
+        nx.draw_networkx_nodes(self.G, pos, nodelist=remaining_nodes, node_color=default_color)
+
+        # draw edges
+        nx.draw_networkx_edges(self.G, pos, arrowstyle='->', arrowsize=10, edge_color='grey')
+        nx.draw_networkx_labels(self.G, pos, labels=labels)
+        plt.axis('off')
+        plt.savefig(f"{self.filename}.png")
+        if self.show:
+            plt.show()
+        plt.close()
+
